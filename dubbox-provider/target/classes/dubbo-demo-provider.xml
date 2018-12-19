@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:dubbo="http://code.alibabatech.com/schema/dubbo"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-2.5.xsd
+    http://code.alibabatech.com/schema/dubbo http://code.alibabatech.com/schema/dubbo/dubbo.xsd">
+
+    <dubbo:application name="demo-provider" owner="programmer" organization="dubbox"/>
+
+    <dubbo:registry address="zookeeper://192.168.52.10:2181"/>
+
+    <!--<dubbo:protocol name="dubbo" serialization="kryo" optimizer="api.SerializationOptimizerImpl"/>-->
+
+    <!-- use tomcat server -->
+    <dubbo:protocol name="rest" port="8888" threads="500" contextpath="services" server="tomcat" accepts="500"
+                    extension="com.alibaba.dubbo.rpc.protocol.rest.support.LoggingFilter"/>
+
+
+    <dubbo:service interface="api.UserService" ref="userService" protocol="dubbo" />
+
+    <!--这里默认使用的协议不再是dubbo  而是 rest  -->
+    <dubbo:service interface="api.UserRestService" ref="userRestService" protocol="rest"  validation="true"/>
+
+    <bean id="userService" class="provider.UserServiceImpl"/>
+
+    <bean id="userRestService" class="provider.UserRestServiceImpl">
+        <property name="userService" ref="userService"/>
+    </bean>
+
+
+</beans>

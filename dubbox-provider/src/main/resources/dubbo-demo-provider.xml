@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:dubbo="http://code.alibabatech.com/schema/dubbo"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-2.5.xsd
+    http://code.alibabatech.com/schema/dubbo http://code.alibabatech.com/schema/dubbo/dubbo.xsd">
+
+    <dubbo:application name="demo-provider" owner="programmer" organization="dubbox"/>
+
+    <dubbo:registry address="zookeeper://192.168.52.10:2181"/>
+
+    <!--<dubbo:protocol name="dubbo" serialization="kryo" optimizer="api.SerializationOptimizerImpl"/>-->
+
+    <!--&lt;!&ndash; use tomcat server &ndash;&gt;-->
+    <dubbo:protocol name="rest" port="8888" threads="500" contextpath="services" server="tomcat" accepts="500"
+                    extension="com.alibaba.dubbo.rpc.protocol.rest.support.LoggingFilter"/>
+
+    <!--
+        <dubbo:protocol name="rest" port="8888"/>
+
+        前所述，我们可以用@Path来配置单个rest服务的URL相对路径。但其实，我们还可以设置一个所有rest服务都适用的基础相对路径，
+        即java web应用中常说的context path。只需要添加如下contextpath属性即可：
+        <dubbo:protocol name="rest" port="8888" contextpath="services"/>
+
+        配置线程数和IO线程数
+        可以为rest服务配置线程池大小：
+        <dubbo:protocol name="rest" threads="500"/>
+
+        //注意：这个配置目前只对server="netty"才能生效。
+        配置长连接
+        Dubbo中的rest服务默认都是采用http长连接来访问，如果想切换为短连接，直接配置：
+        <dubbo:protocol name="rest" keepalive="false"/>
+
+
+        配置最大的HTTP连接数
+        可以配置服务器提供端所能同时接收的最大HTTP连接数，防止REST server被过多连接撑爆，以作为一种最基本的自我保护机制：
+        <dubbo:protocol name="rest" accepts="500" server="tomcat/>
+        注意：这个配置目前只对server="tomcat"才能生效。
+
+
+        配置每个消费端的超时时间和HTTP连接数
+        如果rest服务的消费端也是dubbo系统，可以像其他dubbo RPC机制一样，配置消费端调用此rest服务的最大超时时间以及每个消费端所能启动的最大HTTP连接数。
+
+        <dubbo:service interface="xxx" ref="xxx" protocol="rest" timeout="2000" connections="10"/>
+        当然，由于这个配置针对消费端生效的，所以也可以在消费端配置：
+
+        <dubbo:reference id="xxx" interface="xxx" timeout="2000" connections="10"/>
+        但是，通常我们建议配置在服务提供端提供此类配置。按照dubbo官方文档的说法：“Provider上尽量多配置Consumer端的属性，让Provider实现者一开始就思考Provider服务特点、服务质量的问题。”
+
+
+        添加自定义的Filter、Interceptor等
+        Dubbo的REST也支持JAX-RS标准的Filter和Interceptor，以方便对REST的请求与响应过程做定制化的拦截处理。
+
+        其中，Filter主要用于访问和设置HTTP请求和响应的参数、URI等等。例如，设置HTTP响应的cache header：
+
+        public class CacheControlFilter implements ContainerResponseFilter {
+
+            public void filter(ContainerRequestContext req, ContainerResponseContext res) {
+                if (req.getMethod().equals("GET")) {
+                    res.getHeaders().add("Cache-Control", "someValue");
+                }
+            }
+        }
+        Interceptor主要用于访问和修改输入与输出字节流，例如，手动添加GZIP压缩：
+
+        public class GZIPWriterInterceptor implements WriterInterceptor {
+
+            @Override
+            public void aroundWriteTo(WriterInterceptorContext context)
+                            throws IOException, WebApplicationException {
+                OutputStream outputStream = context.getOutputStream();
+                context.setOutputStream(new GZIPOutputStream(outputStream));
+                context.proceed();
+            }
+        }
+        在标准JAX-RS应用中，我们一般是为Filter和Interceptor添加@Provider annotation，然后JAX-RS runtime会自动发现并启用它们。而在dubbo中，我们是通过添加XML配置的方式来注册Filter和Interceptor：
+
+        <dubbo:protocol name="rest" port="8888" extension="xxx.TraceInterceptor, xxx.TraceFilter"/>
+
+        在此，我们可以将Filter、Interceptor和DynamicFuture这三种类型的对象都添加到extension属性上，多个之间用逗号分隔。（DynamicFuture是另一个接口，可以方便我们更动态的启用Filter和Interceptor，感兴趣请自行google。）
+
+        当然，dubbo自身也支持Filter的概念，但我们这里讨论的Filter和Interceptor更加接近协议实现的底层，相比dubbo的filter，可以做更底层的定制化。
+
+        注：这里的XML属性叫extension，而不是叫interceptor或者filter，是因为除了Interceptor和Filter，未来我们还会添加更多的扩展类型。
+
+
+        添加自定义的Exception处理
+        Dubbo的REST也支持JAX-RS标准的ExceptionMapper，可以用来定制特定exception发生后应该返回的HTTP响应。
+
+        public class CustomExceptionMapper implements ExceptionMapper<NotFoundException> {
+
+            public Response toResponse(NotFoundException e) {
+                return Response.status(Response.Status.NOT_FOUND).entity("Oops! the requested resource is not found!").type("text/plain").build();
+            }
+        }
+        和Interceptor、Filter类似，将其添加到XML配置文件中即可启用：
+
+        <dubbo:protocol name="rest" port="8888" extension="xxx.CustomExceptionMapper"/>
+
+
+
+        配置HTTP日志输出
+        Dubbo rest支持输出所有HTTP请求/响应中的header字段和body消息体。
+
+        在XML配置中添加如下自带的REST filter：
+
+        <dubbo:protocol name="rest" port="8888" extension="com.alibaba.dubbo.rpc.protocol.rest.support.LoggingFilter"/>
+        然后配置在logging配置中至少为com.alibaba.dubbo.rpc.protocol.rest.support打开INFO级别日志输出，例如，在log4j.xml中配置：
+
+        <logger name="com.alibaba.dubbo.rpc.protocol.rest.support">
+            <level value="INFO"/>
+            <appender-ref ref="CONSOLE"/>
+        </logger>
+        当然，你也可以直接在ROOT logger打开INFO级别日志输出：
+        <root>
+            <level value="INFO" />
+            <appender-ref ref="CONSOLE"/>
+        </root>
+
+
+        输入参数的校验
+        dubbo的rest支持采用Java标准的bean validation annotation（JSR 303)来做输入校验http://beanvalidation.org/。
+        为了和其他dubbo远程调用协议保持一致，在rest中作校验的annotation必须放在服务的接口上，例如：
+        public interface UserService {
+
+            User getUser(@Min(value=1L, message="User ID must be greater than 1") Long id);
+        }
+        当然，在很多其他的bean validation的应用场景都是将annotation放到实现类而不是接口上。把annotation放在接口上至少有一个好处是，dubbo的客户端可以共享这个接口的信息，dubbo甚至不需要做远程调用，在本地就可以完成输入校验。
+
+        然后按照dubbo的标准方式在XML配置中打开验证：
+        <dubbo:service interface=xxx.UserService" ref="userService" protocol="rest" validation="true"/>
+        在dubbo的其他很多远程调用协议中，如果输入验证出错，是直接将RpcException抛向客户端，而在rest中由于客户端经常是非dubbo，甚至非java的系统，所以不便直接抛出Java异常。因此，目前我们将校验错误以XML的格式返回：
+        <violationReport>
+            <constraintViolations>
+                <path>getUserArgument0</path>
+                <message>User ID must be greater than 1</message>
+                <value>0</value>
+            </constraintViolations>
+        </violationReport>
+        稍后也会支持其他数据格式的返回值。至于如何对验证错误消息作国际化处理，直接参考bean validation的相关文档即可。
+
+        如果你认为默认的校验错误返回格式不符合你的要求，可以如上面章节所述，添加自定义的ExceptionMapper来自由的定制错误返回格式。需要注意的是，这个ExceptionMapper必须用泛型声明来捕获dubbo的RpcException，才能成功覆盖dubbo rest默认的异常处理策略。为了简化操作，其实这里最简单的方式是直接继承dubbo rest的RpcExceptionMapper，并覆盖其中处理校验异常的方法即可：
+
+        public class MyValidationExceptionMapper extends RpcExceptionMapper {
+
+            protected Response handleConstraintViolationException(ConstraintViolationException cve) {
+                ViolationReport report = new ViolationReport();
+                for (ConstraintViolation cv : cve.getConstraintViolations()) {
+                    report.addConstraintViolation(new RestConstraintViolation(
+                            cv.getPropertyPath().toString(),
+                            cv.getMessage(),
+                            cv.getInvalidValue() == null ? "null" : cv.getInvalidValue().toString()));
+                }
+                // 采用json输出代替xml输出
+                return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(report).type(ContentType.APPLICATION_JSON_UTF_8).build();
+            }
+        }
+        然后将这个ExceptionMapper添加到XML配置中即可：
+        <dubbo:protocol name="rest" port="8888" extension="xxx.MyValidationExceptionMapper"/>
+
+
+    -->
+
+
+    <dubbo:service interface="api.UserService" ref="userService" protocol="dubbo" />
+
+    <!--这里默认使用的协议不再是dubbo  而是 rest  -->
+    <dubbo:service interface="api.UserRestService" ref="userRestService" protocol="rest"  validation="true"/>
+
+    <bean id="userService" class="provider.UserServiceImpl"/>
+
+    <bean id="userRestService" class="provider.UserRestServiceImpl">
+        <property name="userService" ref="userService"/>
+    </bean>
+
+
+</beans>

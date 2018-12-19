@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="GBK" standalone="yes"?>
+<list>
+    <student attr="12">
+        <className>internet</className>
+        <NAME>tom</NAME>
+    </student>
+    <student attr="122">
+        <className>internet2</className>
+        <NAME>tom2</NAME>
+    </student>
+</list>
